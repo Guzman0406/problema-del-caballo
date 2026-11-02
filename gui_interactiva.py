@@ -1,14 +1,3 @@
-# gui_interactiva.py
-# Ventana de escritorio (CustomTkinter) para ingresar la casilla inicial y ver
-# animado, paso a paso, cómo el agente decide su siguiente movimiento.
-#
-# No modifica la lógica del agente: resuelve el tour una sola vez con
-# resolver_tour (tal cual está en search.py) y luego, para animar, vuelve a
-# llamar a las mismas funciones puras (obtener_saltos_posibles,
-# contar_salidas_libres, ordenar_por_heuristica) sobre una copia del tablero
-# que se va llenando en el mismo orden que el agente ya encontró. Por eso las
-# opciones que se muestran en pantalla son exactamente las que el agente vio.
-
 import random
 import tkinter as tk
 from tkinter import messagebox
@@ -27,6 +16,8 @@ ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("dark-blue")
 
 CELDA = 54
+MARGEN = 24  # espacio alrededor del tablero para las coordenadas
+LETRAS_COLUMNAS = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']
 
 BG_APP = "#0f1115"
 BG_PANEL = "#171a21"
@@ -116,7 +107,8 @@ class AppCaballo(ctk.CTk):
         self.lbl_estado.pack(anchor="w", padx=14, pady=(14, 8))
 
         tam = CELDA * TAMANO_TABLERO
-        self.canvas = tk.Canvas(col_izq, width=tam, height=tam, bg=BG_PANEL_ALT, highlightthickness=0)
+        tam_canvas = tam + 2 * MARGEN
+        self.canvas = tk.Canvas(col_izq, width=tam_canvas, height=tam_canvas, bg=BG_PANEL_ALT, highlightthickness=0)
         self.canvas.pack(padx=14, pady=(0, 10))
 
         self.celdas = {}
@@ -129,7 +121,7 @@ class AppCaballo(ctk.CTk):
             col_izq,
             text=("\U0001F4A1  Regla de Warnsdorff: el caballo salta a la casilla candidata que, desde ahí, "
                   "tiene el MENOR número de salidas libres hacia casillas aún no visitadas."),
-            font=ctk.CTkFont(size=11), text_color=TEXT_MUTED, wraplength=tam, justify="left",
+            font=ctk.CTkFont(size=11), text_color=TEXT_MUTED, wraplength=tam_canvas, justify="left",
             fg_color=BG_PANEL_ALT, corner_radius=10, anchor="w",
         ).pack(fill="x", padx=14, pady=(0, 14))
 
@@ -233,7 +225,7 @@ class AppCaballo(ctk.CTk):
         self.candidato_ids = []
         for fila in range(TAMANO_TABLERO):
             for columna in range(TAMANO_TABLERO):
-                x1, y1 = columna * CELDA, fila * CELDA
+                x1, y1 = MARGEN + columna * CELDA, MARGEN + fila * CELDA
                 x2, y2 = x1 + CELDA, y1 + CELDA
                 color = BOARD_LIGHT if (fila + columna) % 2 == 0 else BOARD_DARK
                 rect = self.canvas.create_rectangle(x1, y1, x2, y2, fill=color, outline="")
@@ -241,10 +233,23 @@ class AppCaballo(ctk.CTk):
                     x1 + CELDA / 2, y1 + CELDA / 2, text="", font=("Consolas", 12, "bold"), fill=TEXT_PRIMARY
                 )
                 self.celdas[(fila, columna)] = (rect, texto)
+        self._dibujar_coordenadas()
         self.knight_id = self.canvas.create_text(-50, -50, text="♞", font=("Arial", 24), fill=CABALLO)
 
+    def _dibujar_coordenadas(self):
+        # columnas a-h de izquierda a derecha y filas 1-8
+        fin = MARGEN + CELDA * TAMANO_TABLERO
+        fuente = ("Consolas", 11, "bold")
+        for i in range(TAMANO_TABLERO):
+            centro = MARGEN + i * CELDA + CELDA / 2
+            letra = LETRAS_COLUMNAS[i]
+            self.canvas.create_text(centro, MARGEN / 2, text=letra, fill=TEXT_MUTED, font=fuente)
+            self.canvas.create_text(centro, fin + MARGEN / 2, text=letra, fill=TEXT_MUTED, font=fuente)
+            self.canvas.create_text(MARGEN / 2, centro, text=str(i + 1), fill=TEXT_MUTED, font=fuente)
+            self.canvas.create_text(fin + MARGEN / 2, centro, text=str(i + 1), fill=TEXT_MUTED, font=fuente)
+
     def _centro(self, fila, columna):
-        return columna * CELDA + CELDA / 2, fila * CELDA + CELDA / 2
+        return MARGEN + columna * CELDA + CELDA / 2, MARGEN + fila * CELDA + CELDA / 2
 
     def _mover_caballo(self, fila, columna):
         x, y = self._centro(fila, columna)

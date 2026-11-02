@@ -1,6 +1,3 @@
-# gui.py
-# Visualización del tablero con matplotlib.
-
 import matplotlib.pyplot as plt
 import numpy as np
 from src.core.config import TAMANO_TABLERO
@@ -28,7 +25,9 @@ def mostrar_resultado(tablero):
     ax.set_xticks(range(TAMANO_TABLERO))
     ax.set_xticklabels(letras)
     ax.set_yticks(range(TAMANO_TABLERO))
-    ax.set_yticklabels(range(8, 0, -1))  # Filas de 8 a 1 (como en ajedrez)
+    # Igual que la matriz: la fila 0 es la "1" y está arriba (1 a 8 de arriba hacia abajo)
+    ax.set_yticklabels(range(1, TAMANO_TABLERO + 1))
+    ax.xaxis.tick_top()
 
     # Escribir el número de paso en cada casilla
     for fila in range(TAMANO_TABLERO):
