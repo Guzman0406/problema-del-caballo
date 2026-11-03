@@ -1,10 +1,3 @@
-# test_todas_las_casillas.py
-# Un test por cada una de las 64 casillas del tablero: verifica si
-# resolver_tour encuentra un tour completo empezando desde esa casilla.
-# No modifica nada de src/, solo lo importa y lo ejecuta tal cual.
-#
-# Ejecutar desde la raiz del proyecto: pytest
-
 import pytest
 
 from src.agent.search import resolver_tour

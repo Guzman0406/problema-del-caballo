@@ -1,6 +1,3 @@
-# board.py
-# Lógica del tablero de ajedrez.
-
 from src.core.config import TAMANO_TABLERO
 
 
@@ -18,9 +15,8 @@ def crear_tablero():
 
 def imprimir_tablero(tablero):
     """
-    Imprime el tablero en la consola (útil para hacer pruebas).
+    Imprime el tablero en la consola.
     """
     for fila in tablero:
-        # Imprime cada número con un formato de 3 espacios para que quede alineado
         print(" ".join(f"{str(casilla):>4}" for casilla in fila))
     print("-" * 40)

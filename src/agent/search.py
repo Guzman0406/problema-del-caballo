@@ -1,4 +1,3 @@
-# search.py
 # El agente de búsqueda con Backtracking y heurística.
 
 from src.game.moves import obtener_saltos_posibles
@@ -7,7 +6,6 @@ from src.core.config import TAMANO_TABLERO
 
 "Saber cual es el camino con menor salidas"
 def ordenar_por_heuristica(tablero, saltos_posibles):
-    """Warnsdorff: prueba primero el salto que deja menos opciones futuras."""
     con_prioridad = []
     for fila, columna in saltos_posibles:
         salidas_futuras = contar_salidas_libres(tablero, fila, columna)

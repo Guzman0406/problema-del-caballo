@@ -1,13 +1,8 @@
-# main.py
-# Punto de entrada del proyecto.
-
 from src.core.coordinates import convertir_a_indices
 from src.game.board import crear_tablero, imprimir_tablero
 from src.agent.search import resolver_tour
 from src.core.errors import ColumnaInvalidaError, FilaInvalidaError, FormatoCoordenadaError
 
-# Cambia este valor a True para ver la gráfica al final.
-# Déjalo en False para probar solo por consola.
 MOSTRAR_GUI = True
 
 

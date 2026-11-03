@@ -1,6 +1,3 @@
-# errors.py
-# Errores personalizados para mensajes más claros al usuario.
-
 class ColumnaInvalidaError(Exception):
     """Se lanza cuando la columna no está entre 'a' y 'h'."""
     def __init__(self, letra):

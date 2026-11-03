@@ -1,14 +1,7 @@
-# generar_reporte.py
-# Corre resolver_tour desde las 64 casillas del tablero, guarda los
-# resultados en un CSV y genera una grafica simple (mapa 8x8) que marca
-# en que casillas SI hay solucion y en cuales NO.
-#
-# No modifica nada de src/, solo lo importa y lo ejecuta.
-# Uso (desde la raiz del proyecto): python3 tests/generar_reporte.py
-
 import csv
 import os
 import sys
+import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -25,7 +18,6 @@ LETRAS = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']
 
 
 def correr_todas_las_casillas():
-    """Devuelve una lista de (fila, columna, exito) para las 64 casillas."""
     resultados = []
     for fila in range(TAMANO_TABLERO):
         for columna in range(TAMANO_TABLERO):
@@ -78,7 +70,10 @@ def graficar(resultados):
 
 
 def main():
+    inicio = time.time()
     resultados = correr_todas_las_casillas()
+    duracion = time.time() - inicio
+
     ruta_csv = guardar_csv(resultados)
     ruta_png = graficar(resultados)
 
@@ -89,6 +84,7 @@ def main():
         print("Casillas SIN solucion:", [convertir_a_coordenada(fila, columna) for fila, columna in fallos])
     else:
         print("Todas las casillas tienen solucion con este algoritmo.")
+    print(f"Tiempo del barrido: {duracion:.4f} s")
     print(f"CSV guardado en: {ruta_csv}")
     print(f"Grafica guardada en: {ruta_png}")
 

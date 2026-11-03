@@ -32,31 +32,45 @@ pip install -r requirements.txt
 ## Uso
 
 ```bash
-python3 main.py
+python3 gui_interactiva.py
 ```
 
 El programa pide una casilla inicial en notación de ajedrez, por ejemplo:
 
 ```
-Ingresa la casilla inicial (ejemplo: (a, 5)):
+(a, 5):
 ```
 
 Letras válidas: `a` a `h` (columna). Números válidos: `1` a `8` (fila). Si el formato o los valores son inválidos, se muestra un mensaje de error sin detener el programa de forma abrupta.
 
-Al terminar, imprime en consola el tablero resuelto con el número de paso en cada casilla (1 al 64). Si `MOSTRAR_GUI = True` en `main.py`, además abre una ventana con el tablero dibujado.
+Al terminar, dibuja el recorrido del tablero resuelto con el número de paso en cada casilla (1 al 64). 
+
+## Pruebas
+
+Las pruebas están en [tests/](tests/): [test_todas_las_casillas.py](tests/test_todas_las_casillas.py) corre el agente desde las 64 casillas del tablero (una prueba por casilla) y [generar_reporte.py](tests/generar_reporte.py) hace el mismo barrido y guarda un CSV y una gráfica con los resultados en `tests/resultados/`.
+
+```bash
+pip install -r requirements-dev.txt
+
+# Correr todas las pruebas
+pytest
+
+# Generar el CSV y la grafica con los resultados del barrido
+python3 tests/generar_reporte.py
+```
 
 ## Arquitectura
 
 ```text
 Caballo/
 ├── src/
-│   ├── core/          # Reglas base y utilidades
-│   │   ├── config.py       # Constantes: tamaño del tablero y movimientos del caballo
+│   ├── core/          # Reglas base 
+│   │   ├── config.py       # tamaño del tablero y movimientos del caballo
 │   │   ├── errors.py       # Excepciones personalizadas para validar el input
 │   │   └── coordinates.py  # Conversión entre notación de ajedrez "(a,5)" e índices de matriz
 │   │
-│   ├── game/          # Lógica del juego
-│   │   ├── board.py        # Creación del tablero y su impresión en consola
+│   ├── game/          # Lógica
+│   │   ├── board.py        # Creación del tablero 
 │   │   └── moves.py        # Cálculo de los saltos válidos del caballo
 │   │
 │   ├── agent/         # El agente de búsqueda
@@ -64,7 +78,7 @@ Caballo/
 │   │   └── search.py       # Backtracking: resuelve el tour
 │   │
 │   └── ui/
-│       └── gui.py          # Visualización del resultado con matplotlib
+│       └── gui_interactiva.py          # Visualización del resultado con matplotlib
 │
 ├── main.py            # Punto de entrada
 └── requirements.txt
@@ -89,7 +103,3 @@ Caballo/
 - **Sensors:** lectura de la posición actual y del estado del tablero (casillas visitadas).
 
 Entorno: determinista, monoagente, secuencial (no episódico), completamente observable, discreto, estático y conocido.
-
-## Próximas modificaciones
-
-<!-- Usa esta sección para ir registrando cambios o ideas a futuro del proyecto. -->

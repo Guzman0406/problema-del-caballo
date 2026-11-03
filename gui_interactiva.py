@@ -10,7 +10,7 @@ from src.core.coordinates import convertir_a_indices, convertir_a_coordenada
 from src.game.board import crear_tablero
 from src.game.moves import obtener_saltos_posibles
 from src.agent.heuristic import contar_salidas_libres
-from src.agent.search import resolver_tour, ordenar_por_heuristica
+from src.agent.search import ordenar_por_heuristica
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("dark-blue")
@@ -18,6 +18,10 @@ ctk.set_default_color_theme("dark-blue")
 CELDA = 54
 MARGEN = 24  # espacio alrededor del tablero para las coordenadas
 LETRAS_COLUMNAS = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']
+
+
+UMBRAL_MODO_RAPIDO = 20
+LOTE_MODO_RAPIDO = 5000
 
 BG_APP = "#0f1115"
 BG_PANEL = "#171a21"
@@ -34,6 +38,7 @@ BOARD_LIGHT = "#2a2f3c"
 BOARD_DARK = "#181c25"
 VISITADA = "#1f6f5c"
 CABALLO = "#f2b84b"
+DANGER = "#e8847a"
 
 
 class AppCaballo(ctk.CTk):
@@ -43,10 +48,14 @@ class AppCaballo(ctk.CTk):
         self.configure(fg_color=BG_APP)
         self.resizable(False, False)
 
-        self.tablero_resuelto = None
-        self.tablero_parcial = None
+        self.tablero = None
+        self.generador = None
         self.posicion_actual = None
-        self.paso_animacion = 1
+        self.profundidad_actual = 0
+        self.retrocesos = 0
+        self.trail_ids_por_celda = {}
+        self._grados_por_casilla = {}
+        self.en_modo_rapido = False
         self.animando = False
         self.pausado = False
         self.after_id = None
@@ -55,7 +64,7 @@ class AppCaballo(ctk.CTk):
         self._construir_header()
         self._construir_cuerpo()
 
-    # ---------- construcción de la interfaz ----------
+    #  construcción de la interfaz 
 
     def _construir_header(self):
         header = ctk.CTkFrame(self, fg_color=BG_PANEL, corner_radius=14)
@@ -74,11 +83,6 @@ class AppCaballo(ctk.CTk):
             fila_titulo, text="Heurística de Warnsdorff", font=ctk.CTkFont(size=10, weight="bold"),
             text_color=ACCENT, fg_color=ACCENT_SOFT, corner_radius=10, height=22, anchor="center",
         ).pack(side="left")
-
-        ctk.CTkLabel(
-            izquierda, text="Visualizador interactivo del recorrido del caballo",
-            font=ctk.CTkFont(size=11), text_color=TEXT_MUTED, anchor="w",
-        ).pack(anchor="w", pady=(4, 0))
 
         derecha = ctk.CTkFrame(header, fg_color="transparent")
         derecha.pack(side="right", padx=14, pady=12)
@@ -113,7 +117,6 @@ class AppCaballo(ctk.CTk):
 
         self.celdas = {}
         self.knight_id = None
-        self.trail_ids = []
         self.candidato_ids = []
         self._dibujar_tablero_vacio()
 
@@ -221,7 +224,7 @@ class AppCaballo(ctk.CTk):
     def _dibujar_tablero_vacio(self):
         self.canvas.delete("all")
         self.celdas = {}
-        self.trail_ids = []
+        self.trail_ids_por_celda = {}
         self.candidato_ids = []
         for fila in range(TAMANO_TABLERO):
             for columna in range(TAMANO_TABLERO):
@@ -267,12 +270,20 @@ class AppCaballo(ctk.CTk):
             self.canvas.delete(item_id)
         self.candidato_ids = []
 
-    def _siguiente_real(self, valor_paso):
-        for fila in range(TAMANO_TABLERO):
-            for columna in range(TAMANO_TABLERO):
-                if self.tablero_resuelto[fila][columna] == valor_paso:
-                    return (fila, columna)
-        return None
+    def _color_casilla(self, fila, columna):
+        return BOARD_LIGHT if (fila + columna) % 2 == 0 else BOARD_DARK
+
+    def _desmarcar_celda_flash(self, fila, columna):
+        rect, texto = self.celdas[(fila, columna)]
+        self.canvas.itemconfig(rect, fill=DANGER)
+        self.canvas.itemconfig(texto, text="")
+        self.after(260, lambda f=fila, c=columna: self._revertir_color_celda(f, c))
+
+    def _revertir_color_celda(self, fila, columna):
+        # Solo revierte si la casilla sigue vacia (nadie la volvio a marcar mientras tanto).
+        if self.tablero is not None and self.tablero[fila][columna] == 0:
+            rect, _ = self.celdas[(fila, columna)]
+            self.canvas.itemconfig(rect, fill=self._color_casilla(fila, columna))
 
     # ---------- registro de decisiones ----------
 
@@ -319,31 +330,25 @@ class AppCaballo(ctk.CTk):
             messagebox.showerror("Coordenada inválida", str(error))
             return
 
-        tablero = crear_tablero()
-        tablero[fila_inicial][columna_inicial] = 1
+        self.tablero = crear_tablero()
+        self.tablero[fila_inicial][columna_inicial] = 1
 
-        self._set_estado("● Buscando solución...", TEXT_MUTED)
-        self.update_idletasks()
-
-        exito = resolver_tour(tablero, fila_inicial, columna_inicial, 1)
-
-        if not exito:
-            self._set_estado("● No se encontró solución desde esa casilla", "#e8847a")
-            return
-
-        self.tablero_resuelto = tablero
         self._dibujar_tablero_vacio()
         self._reset_log()
 
-        self.tablero_parcial = crear_tablero()
-        self.tablero_parcial[fila_inicial][columna_inicial] = 1
         self.posicion_actual = (fila_inicial, columna_inicial)
-        self.paso_animacion = 1
+        self.profundidad_actual = 1
+        self.retrocesos = 0
+        self.trail_ids_por_celda = {}
+        self._grados_por_casilla = {}
+        self.en_modo_rapido = False
 
         self._marcar_celda(fila_inicial, columna_inicial, 1)
         self._mover_caballo(fila_inicial, columna_inicial)
         self._log(f"Paso 1: inicio en {convertir_a_coordenada(fila_inicial, columna_inicial)}")
         self._actualizar_progreso()
+
+        self.generador = self._generador_tour(self.tablero, fila_inicial, columna_inicial, 1)
 
         self.animando = True
         self.pausado = False
@@ -351,7 +356,7 @@ class AppCaballo(ctk.CTk):
         self.btn_pausar.configure(state="normal", text="⏸ Pausar")
         self._set_estado("● Animando el recorrido...", ACCENT)
 
-        self._animar_decision()
+        self._paso_generador()
 
     def _alternar_pausa(self):
         if not self.animando:
@@ -377,9 +382,13 @@ class AppCaballo(ctk.CTk):
         self.callback_pendiente = None
         self.animando = False
         self.pausado = False
-        self.tablero_resuelto = None
-        self.tablero_parcial = None
-        self.paso_animacion = 1
+        self.tablero = None
+        self.generador = None
+        self.profundidad_actual = 0
+        self.retrocesos = 0
+        self.trail_ids_por_celda = {}
+        self._grados_por_casilla = {}
+        self.en_modo_rapido = False
 
         self._dibujar_tablero_vacio()
         self._reset_log()
@@ -397,32 +406,184 @@ class AppCaballo(ctk.CTk):
         self.registro.configure(state="disabled")
 
     def _actualizar_progreso(self):
-        self.barra_progreso.set(self.paso_animacion / (TAMANO_TABLERO * TAMANO_TABLERO))
-        self.lbl_progreso.configure(text=f"Progreso: {self.paso_animacion} / {TAMANO_TABLERO * TAMANO_TABLERO}")
-        self.lbl_pasos.configure(text=f"{self.paso_animacion} pasos")
+        total = TAMANO_TABLERO * TAMANO_TABLERO
+        self.barra_progreso.set(self.profundidad_actual / total)
+        self.lbl_progreso.configure(text=f"Progreso: {self.profundidad_actual} / {total}")
+        self.lbl_pasos.configure(text=f"{self.profundidad_actual} pasos · {self.retrocesos} retrocesos")
 
-    # ---------- animación de la decisión (Warnsdorff en vivo) ----------
+    # ---------- motor de búsqueda replicado para la animación ----------
+  
 
-    def _animar_decision(self):
-        if self.paso_animacion >= TAMANO_TABLERO * TAMANO_TABLERO:
-            self.animando = False
-            self.btn_resolver.configure(state="normal")
-            self.btn_pausar.configure(state="disabled")
-            self._set_estado("✓ ¡Tour completo!", ACCENT)
+    def _generador_tour(self, tablero, fila_actual, columna_actual, paso_actual):
+        if paso_actual == TAMANO_TABLERO * TAMANO_TABLERO:
+            yield ('exito', fila_actual, columna_actual, paso_actual)
+            return True
+
+        saltos_posibles = obtener_saltos_posibles(tablero, fila_actual, columna_actual)
+        saltos_posibles = ordenar_por_heuristica(tablero, saltos_posibles)
+        yield ('candidatos', fila_actual, columna_actual, paso_actual, saltos_posibles)
+
+        for nueva_fila, nueva_columna in saltos_posibles:
+            tablero[nueva_fila][nueva_columna] = paso_actual + 1
+            yield ('marcar', fila_actual, columna_actual, nueva_fila, nueva_columna, paso_actual + 1)
+
+            resultado = yield from self._generador_tour(tablero, nueva_fila, nueva_columna, paso_actual + 1)
+            if resultado:
+                return True
+
+            tablero[nueva_fila][nueva_columna] = 0
+            yield ('desmarcar', fila_actual, columna_actual, nueva_fila, nueva_columna, paso_actual + 1)
+
+        yield ('sin_opciones', fila_actual, columna_actual, paso_actual)
+        return False
+
+    # ---------- despachador: traduce cada evento del generador a animación ----------
+    
+
+    def _paso_generador(self):
+        if not self.animando:
             return
 
-        fila_actual, columna_actual = self.posicion_actual
-        candidatos = obtener_saltos_posibles(self.tablero_parcial, fila_actual, columna_actual)
-        candidatos_ordenados = ordenar_por_heuristica(self.tablero_parcial, candidatos)
-        # La casilla real del siguiente paso se lee del tour ya resuelto, no se
-        # asume "siempre la de menor grado": si el agente tuvo que retroceder
-        # en este tramo, la elegida puede no ser la primera de la lista.
-        elegido = self._siguiente_real(self.paso_animacion + 1)
+        if not self.en_modo_rapido:
+            if self.retrocesos >= UMBRAL_MODO_RAPIDO:
+                self.en_modo_rapido = True
+                self._set_estado("⚡ Modo rápido: esta casilla necesita muchos retrocesos...", CABALLO)
+                self._log(
+                    f"⚡ Se superaron {UMBRAL_MODO_RAPIDO} retrocesos: "
+                    f"el resto de la búsqueda se acelera automáticamente."
+                )
+            else:
+                self._procesar_siguiente_evento(detallado=True)
+                return
 
-        self._mostrar_opciones(fila_actual, columna_actual, candidatos_ordenados, elegido)
+        # ---- modo rápido: procesa muchos eventos sin animar cada uno ----
+        for _ in range(LOTE_MODO_RAPIDO):
+            if self._procesar_siguiente_evento(detallado=False):
+                return
+        if self.animando:
+            self._sincronizar_vista_completa()
+            self._programar(1, self._paso_generador)
 
-        retraso = self.velocidad.get()
-        self._programar(retraso, lambda: self._confirmar_decision(fila_actual, columna_actual, elegido, retraso))
+    def _procesar_siguiente_evento(self, detallado):
+        """Avanza el generador un evento. Devuelve True si la búsqueda terminó."""
+        try:
+            evento = next(self.generador)
+        except StopIteration as parada:
+            self._finalizar_busqueda(bool(parada.value))
+            return True
+
+        tipo = evento[0]
+
+        if tipo == 'candidatos':
+            _, fila, columna, paso, ordenados = evento
+            if detallado:
+                self._grados_por_casilla = {
+                    casilla: contar_salidas_libres(self.tablero, casilla[0], casilla[1])
+                    for casilla in ordenados
+                }
+                elegido = ordenados[0] if ordenados else None
+                self._mostrar_opciones(fila, columna, ordenados, elegido)
+                retraso = self.velocidad.get() if ordenados else 60
+                self._programar(retraso, self._paso_generador)
+
+        elif tipo == 'marcar':
+            _, fa, ca, nf, nc, nuevo_paso = evento
+            self.posicion_actual = (nf, nc)
+            self.profundidad_actual = nuevo_paso
+            if detallado:
+                self._limpiar_candidatos()
+                grado = self._grados_por_casilla.get((nf, nc), 0)
+
+                x0, y0 = self._centro(fa, ca)
+                x1, y1 = self._centro(nf, nc)
+                linea = self.canvas.create_line(x0, y0, x1, y1, fill=TRAZO, width=2)
+                self.trail_ids_por_celda[(nf, nc)] = linea
+
+                self._marcar_celda(nf, nc, nuevo_paso)
+                self._mover_caballo(nf, nc)
+
+                self._log(
+                    f"Paso {nuevo_paso - 1}→{nuevo_paso}: "
+                    f"{convertir_a_coordenada(fa, ca)} → {convertir_a_coordenada(nf, nc)}  (grado {grado})"
+                )
+                self._actualizar_progreso()
+
+                retraso = self.velocidad.get()
+                self._programar(max(80, retraso // 3), self._paso_generador)
+
+        elif tipo == 'desmarcar':
+            _, fa, ca, nf, nc, paso_fallido = evento
+            self.posicion_actual = (fa, ca)
+            self.profundidad_actual = paso_fallido - 1
+            self.retrocesos += 1
+            if detallado:
+                linea = self.trail_ids_por_celda.pop((nf, nc), None)
+                if linea is not None:
+                    self.canvas.delete(linea)
+
+                self._desmarcar_celda_flash(nf, nc)
+                self._mover_caballo(fa, ca)
+
+                self._log(
+                    f"↩ Retroceso: {convertir_a_coordenada(nf, nc)} no llevó a una solución completa, "
+                    f"se prueba la siguiente opción"
+                )
+                self._actualizar_progreso()
+
+                retraso = self.velocidad.get()
+                self._programar(max(120, retraso // 2), self._paso_generador)
+
+        elif tipo == 'sin_opciones':
+            _, fila, columna, paso = evento
+            if detallado:
+                self._log(f"⨯ Ninguna opción funcionó desde {convertir_a_coordenada(fila, columna)}, retrocede")
+                self._programar(60, self._paso_generador)
+
+        elif tipo == 'exito':
+            if detallado:
+                total = TAMANO_TABLERO * TAMANO_TABLERO
+                self._log(f"🏆 ¡Las {total} casillas visitadas! Tour completo.")
+                self._programar(60, self._paso_generador)
+
+        return False
+
+    def _finalizar_busqueda(self, exito):
+        self.animando = False
+        self.btn_resolver.configure(state="normal")
+        self.btn_pausar.configure(state="disabled")
+        if self.en_modo_rapido:
+            self._sincronizar_vista_completa()
+        if exito:
+            self._set_estado("✓ ¡Tour completo!", ACCENT)
+        else:
+            self._set_estado("● No se encontró solución desde esa casilla", DANGER)
+
+    def _sincronizar_vista_completa(self):
+        """Redibuja el tablero completo desde el estado real de self.tablero.
+
+        Se usa al salir del modo rápido (o al terminar en modo rápido), ya que
+        durante ese modo no se fue animando cada paso individualmente.
+        """
+        self._dibujar_tablero_vacio()
+        posiciones_por_paso = {}
+        for fila in range(TAMANO_TABLERO):
+            for columna in range(TAMANO_TABLERO):
+                valor = self.tablero[fila][columna]
+                if valor:
+                    posiciones_por_paso[valor] = (fila, columna)
+                    self._marcar_celda(fila, columna, valor)
+
+        for paso in range(1, self.profundidad_actual):
+            origen = posiciones_por_paso.get(paso)
+            destino = posiciones_por_paso.get(paso + 1)
+            if origen and destino:
+                x0, y0 = self._centro(*origen)
+                x1, y1 = self._centro(*destino)
+                linea = self.canvas.create_line(x0, y0, x1, y1, fill=TRAZO, width=2)
+                self.trail_ids_por_celda[destino] = linea
+
+        self._mover_caballo(*self.posicion_actual)
+        self._actualizar_progreso()
 
     def _mostrar_opciones(self, fila_actual, columna_actual, candidatos, elegido):
         self._limpiar_candidatos()
@@ -436,35 +597,9 @@ class AppCaballo(ctk.CTk):
             linea = self.canvas.create_line(x0, y0, x1, y1, fill=color, width=ancho, arrow=tk.LAST, dash=trazo)
             self.candidato_ids.append(linea)
 
-            grado = contar_salidas_libres(self.tablero_parcial, fila, columna)
+            grado = self._grados_por_casilla.get((fila, columna), contar_salidas_libres(self.tablero, fila, columna))
             etiqueta = self.canvas.create_text(x1, y1 - 17, text=str(grado), fill=color, font=("Consolas", 10, "bold"))
             self.candidato_ids.append(etiqueta)
-
-    def _confirmar_decision(self, fila_actual, columna_actual, elegido, retraso):
-        self._limpiar_candidatos()
-
-        fila, columna = elegido
-        x0, y0 = self._centro(fila_actual, columna_actual)
-        x1, y1 = self._centro(fila, columna)
-        linea = self.canvas.create_line(x0, y0, x1, y1, fill=TRAZO, width=2)
-        self.trail_ids.append(linea)
-
-        grado_elegido = contar_salidas_libres(self.tablero_parcial, fila, columna)
-
-        self.paso_animacion += 1
-        self.tablero_parcial[fila][columna] = self.paso_animacion
-        self._marcar_celda(fila, columna, self.paso_animacion)
-        self._mover_caballo(fila, columna)
-        self.posicion_actual = (fila, columna)
-
-        self._log(
-            f"Paso {self.paso_animacion - 1}→{self.paso_animacion}: "
-            f"{convertir_a_coordenada(fila_actual, columna_actual)} → "
-            f"{convertir_a_coordenada(fila, columna)}  (grado {grado_elegido})"
-        )
-        self._actualizar_progreso()
-
-        self._programar(max(80, retraso // 3), self._animar_decision)
 
 
 def main():
